@@ -5,6 +5,7 @@ import random
 import sys
 import numpy as np
 import cv2
+import string
 
 from img_utils import *
 from jittering_methods import *
@@ -39,6 +40,14 @@ class FakePlateGenerator():
         self.character_position_x_list_part_1 = [43, 111]  
         #position for "xxxxx"              
         self.character_position_x_list_part_2 = [205, 269, 330, 395, 464]
+
+        self.chinese_index = {'京': '00', '津': '01', '冀': '02', '晋': '03', '蒙': '04',
+                                '辽': '05', '吉': '06', '黑': '07', '沪': '08', '苏': '09',
+                                '浙': '10', '皖': '11', '闽': '12', '赣': '13', '鲁': '14',
+                                '豫': '15', '鄂': '16', '湘': '17', '粤': '18', '桂': '19',
+                                '琼': '20', '渝': '21', '川': '22', '贵': '23', '云': '24',
+                                '藏': '25', '陕': '26', '甘': '27', '青': '28', '宁': '29',
+                                '新': '30', '港': '31', '澳': '32'}
     
     def get_radom_sample(self, data):
         keys = list(data.keys())
@@ -103,6 +112,50 @@ class FakePlateGenerator():
 
         return plate_img, plate_name
 
+    def generate_specific_plate(self, plate):
+        _, plate_img = self.get_radom_sample(self.plates)
+        plate_name = ''
+
+        # 添加省份
+        character = plate[0]
+        img = self.chinese[self.chinese_index[character]]
+        self.add_character_to_plate(img, plate_img, self.character_position_x_list_part_1[0])
+        plate_name += '%s'%(character,)
+        # 添加地区字母
+        letter = plate[1]
+        img = self.letters[letter.lower()]
+        self.add_character_to_plate(img, plate_img, self.character_position_x_list_part_1[1])
+        plate_name += '%s'%(letter,)
+        # 添加后面字母数字组合
+        for idx in range(2, len(plate)):
+            character = plate[idx]
+            img = self.numbers_and_letters[character.lower()]
+            self.add_character_to_plate(img, plate_img, self.character_position_x_list_part_2[idx-2]) # 0 based
+            plate_name += character
+        
+        # RGBA to RGB
+        plate_img = cv2.cvtColor(plate_img, cv2.COLOR_BGRA2BGR)
+        # resize
+        plate_img = cv2.resize(plate_img, self.dst_size, interpolation=cv2.INTER_AREA)
+
+        return plate_img, plate_name
+
+chinese_letters = '京津冀晋蒙辽吉黑沪苏浙皖闽赣鲁豫鄂湘粤桂琼渝川贵云藏陕甘青宁新港澳'
+alphabet = [l for l in string.ascii_uppercase if l not in 'IO']
+def same_character_in_a_row():
+    plate_name = ''
+    # 添加省份
+    plate_name += '%s'%(np.random.choice(list(chinese_letters), 1)[0],)
+    # 添加地区字母
+    plate_name += '%s'%(np.random.choice(alphabet, 1)[0],)
+    for i in range(5):
+        if np.random.random() <= 0.2:
+            plate_name += plate_name[-1]
+        else:
+            plate_name += '%s'%np.random.choice(alphabet+list(range(10)), 1)[0]
+    return plate_name
+    
+
 if __name__ == "__main__":
     fake_resource_dir  = sys.path[0] + "/fake_resource/" 
     output_dir = sys.path[0] + "/test_plate/"
@@ -111,11 +164,12 @@ if __name__ == "__main__":
     fake_plate_generator = FakePlateGenerator(fake_resource_dir, img_size)
     reset_folder(output_dir)
 
-    for i in range(0, 1000):
-        plate, plate_name = fake_plate_generator.generate_one_plate()
+    for i in range(0, 100000):
+        plate, plate_name = fake_plate_generator.generate_specific_plate(same_character_in_a_row())
         plate = jittering_color(plate)
         plate = add_noise(plate)
         plate = jittering_blur(plate)
         plate = jittering_scale(plate)
 
-        save_random_img(output_dir, plate)
+        #save_random_img(output_dir, plate)
+        cv2.imwrite(os.path.join(output_dir, plate_name+'.jpg'), plate)
